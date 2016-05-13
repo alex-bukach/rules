@@ -1,0 +1,36 @@
+diff --git a/src/Context/ContextDefinition.php b/src/Context/ContextDefinition.php
+index 1ff4d44..c364326 100644
+--- a/modules/rules/src/Context/ContextDefinition.php
++++ b/modules/rules/src/Context/ContextDefinition.php
+@@ -21,6 +21,7 @@ class ContextDefinition extends ContextDefinitionCore implements ContextDefiniti
+     'multiple' => 'isMultiple',
+     'required' => 'isRequired',
+     'default_value' => 'defaultValue',
++    'form_element' => 'formElement',
+     'constraints' => 'constraints',
+     'allow_null' => 'allowNull',
+     'assignment_restriction' => 'assignmentRestriction',
+diff --git a/src/Form/Expression/ContextFormTrait.php b/src/Form/Expression/ContextFormTrait.php
+index e535ba9..5fa6778 100644
+--- a/modules/rules/src/Form/Expression/ContextFormTrait.php
++++ b/modules/rules/src/Form/Expression/ContextFormTrait.php
+@@ -50,6 +50,7 @@ public function buildContextForm(array $form, FormStateInterface $form_state, $c
+     }
+     $form['context'][$context_name]['setting'] = [
+       '#type' => 'textfield',
++      '#type' => isset($context_definition->formElement) ? $context_definition->formElement : 'textfield',
+       '#title' => $title,
+       '#required' => $context_definition->isRequired(),
+       '#default_value' => $default_value,
+diff --git a/src/Plugin/RulesAction/SystemSendEmail.php b/src/Plugin/RulesAction/SystemSendEmail.php
+index e8cc4b8..d0c215a 100644
+--- a/modules/rules/src/Plugin/RulesAction/SystemSendEmail.php
++++ b/modules/rules/src/Plugin/RulesAction/SystemSendEmail.php
+@@ -29,6 +29,7 @@
+  *     "message" = @ContextDefinition("string",
+  *       label = @Translation("Message"),
+  *       description = @Translation("The email's message body."),
++ *       form_element = "textarea",
+  *     ),
+  *     "reply" = @ContextDefinition("email",
+  *       label = @Translation("Reply to"),

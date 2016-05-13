@@ -1,0 +1,26 @@
+From 0e70d43ba6e259638c40a3db99dcdaff54069589 Mon Sep 17 00:00:00 2001
+From: yanniboi <yanniboi@1837556.no-reply.drupal.org>
+Date: Tue, 3 May 2016 14:13:46 +0100
+Subject: [PATCH] Issue #2702159: Added hook_mail for rules module.
+
+---
+ rules.module | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/rules.module b/rules.module
+index 10038fa..8934989 100644
+--- a/rules.module
++++ b/rules.module
+@@ -149,3 +149,12 @@ function rules_cron() {
+   $event_dispatcher = \Drupal::service('event_dispatcher');
+   $event_dispatcher->dispatch(SystemCronEvent::EVENT_NAME, $event);
+ }
++
++/**
++ * Implements hook_mail().
++ */
++function rules_mail($key, &$message, $params) {
++  $message['subject'] .= str_replace(array("\r", "\n"), '', $params['subject']);
++  $message['body'][] = $params['message'];
++}
++

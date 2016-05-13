@@ -1,0 +1,13 @@
+diff --git a/config/schema/rules.action.schema.yml b/config/schema/rules.action.schema.yml
+index bbefa6a..dd6cd09 100644
+--- a/config/schema/rules.action.schema.yml
++++ b/config/schema/rules.action.schema.yml
+@@ -20,7 +20,7 @@
+   type: mapping
+   label: Send e-mail action context values
+   mapping:
+-    to:
++    to.*:
+       type: email
+     subject:
+       type: text

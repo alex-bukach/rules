@@ -1,0 +1,204 @@
+diff --git a/rules.module b/rules.module
+index 5c790e4..af6b425 100644
+--- a/rules.module
++++ b/rules.module
+@@ -143,3 +143,14 @@ function rules_cron() {
+   $event_dispatcher = \Drupal::service('event_dispatcher');
+   $event_dispatcher->dispatch(SystemCronEvent::EVENT_NAME, $event);
+ }
++
++/**
++ * Implements hook_mail().
++ *
++ * Set's the message subject and body as configured.
++ */
++function rules_mail($key, &$message, $params) {
++
++  $message['subject'] .= str_replace(array("\r", "\n"), '', $params['subject']);
++  $message['body'][] = $params['message'];
++}
+diff --git a/src/Context/ContextDefinition.php b/src/Context/ContextDefinition.php
+index be10923..281f186 100644
+--- a/src/Context/ContextDefinition.php
++++ b/src/Context/ContextDefinition.php
+@@ -26,6 +26,10 @@ class ContextDefinition extends ContextDefinitionCore implements ContextDefiniti
+     'multiple' => 'isMultiple',
+     'required' => 'isRequired',
+     'default_value' => 'defaultValue',
++    'form_element' => 'formElement',
++    'token_types' => 'tokenTypes',
++    'is_token_data' => 'isTokenData',
++    'hide_switch_to_data_selection_button' => 'hideSwitchToDataSelectionButton',
+     'constraints' => 'constraints',
+     'allow_null' => 'allowNull',
+     'assignment_restriction' => 'assignmentRestriction',
+diff --git a/src/Core/RulesActionBase.php b/src/Core/RulesActionBase.php
+index 431a797..7569488 100644
+--- a/src/Core/RulesActionBase.php
++++ b/src/Core/RulesActionBase.php
+@@ -10,6 +10,7 @@ namespace Drupal\rules\Core;
+ use Drupal\Component\Plugin\Exception\ContextException;
+ use Drupal\Core\Access\AccessResult;
+ use Drupal\Core\Plugin\ContextAwarePluginBase;
++use Drupal\Core\Render\BubbleableMetadata;
+ use Drupal\Core\Session\AccountInterface;
+ use Drupal\rules\Context\ContextProviderTrait;
+ 
+@@ -125,8 +126,23 @@ abstract class RulesActionBase extends ContextAwarePluginBase implements RulesAc
+     // Provide a reasonable default implementation that calls doExecute() while
+     // passing the defined context as arguments.
+     $args = [];
++    $token_module_exists = \Drupal::moduleHandler()->moduleExists('token');
++    if($token_module_exists) {
++      $token_data = [];
++      $token_service = \Drupal::service("token");
++    }
+     foreach ($this->getContextDefinitions() as $name => $definition) {
+       $args[$name] = $this->getContextValue($name);
++
++      if($token_module_exists){
++        if(!empty($definition->isTokenData)){
++          $token_data[$name] = $args[$name];
++        }
++
++        if(isset($definition->tokenTypes)) {
++          $args[$name] = $token_service->replace($args[$name], $token_data, array(), new BubbleableMetadata());
++        }
++      }
+     }
+     call_user_func_array([$this, 'doExecute'], $args);
+   }
+diff --git a/src/Form/Expression/ContextFormTrait.php b/src/Form/Expression/ContextFormTrait.php
+index 950f11a..2bcef38 100644
+--- a/src/Form/Expression/ContextFormTrait.php
++++ b/src/Form/Expression/ContextFormTrait.php
+@@ -58,24 +58,40 @@ trait ContextFormTrait {
+       $default_value = $context_definition->getDefaultValue();
+     }
+     $form['context'][$context_name]['setting'] = [
+-      '#type' => 'textfield',
++      '#type' => isset($context_definition->formElement) ? $context_definition->formElement : 'textfield',
+       '#title' => $title,
+       '#description' => $description,
+       '#required' => $context_definition->isRequired(),
+       '#default_value' => $default_value,
+     ];
+ 
+-    $value = $mode == 'selector' ? $this->t('Switch to the direct input mode') : $this->t('Switch to data selection');
+-    $form['context'][$context_name]['switch_button'] = [
+-      '#type' => 'submit',
+-      '#name' => 'context_' . $context_name,
+-      '#attributes' => ['class' => ['rules-switch-button']],
+-      '#parameter' => $context_name,
+-      '#value' => $value,
+-      '#submit' => [static::class . '::switchContextMode'],
+-      // Do not validate!
+-      '#limit_validation_errors' => [],
+-    ];
++    if(\Drupal::moduleHandler()->moduleExists('token') && isset($context_definition->tokenTypes)){
++      $form['context'][$context_name]['setting'] += [
++        '#element_validate' => array('token_element_validate'),
++        '#after_build' => array('token_element_validate'),
++        '#token_types' => $context_definition->tokenTypes,
++        '#min_tokens' => 0,
++      ];
++      // Show the token help relevant to this pattern type.
++      $form['context'][$context_name]['token_help'] = array(
++        '#theme' => 'token_tree_link',
++        '#token_types' => $context_definition->tokenTypes,
++      );
++    }
++
++    if(empty($context_definition->hideSwitchToDataSelectionButton)) {
++      $value = $mode == 'selector' ? $this->t('Switch to the direct input mode') : $this->t('Switch to data selection');
++      $form['context'][$context_name]['switch_button'] = [
++        '#type' => 'submit',
++        '#name' => 'context_' . $context_name,
++        '#attributes' => ['class' => ['rules-switch-button']],
++        '#parameter' => $context_name,
++        '#value' => $value,
++        '#submit' => [static::class . '::switchContextMode'],
++        // Do not validate!
++        '#limit_validation_errors' => [],
++      ];
++    }
+     return $form;
+   }
+ 
+diff --git a/src/Plugin/RulesAction/SystemSendEmail.php b/src/Plugin/RulesAction/SystemSendEmail.php
+index 0903395..4ee2584 100644
+--- a/src/Plugin/RulesAction/SystemSendEmail.php
++++ b/src/Plugin/RulesAction/SystemSendEmail.php
+@@ -10,6 +10,7 @@ namespace Drupal\rules\Plugin\RulesAction;
+ use Drupal\Core\Language\LanguageInterface;
+ use Drupal\Core\Mail\MailManagerInterface;
+ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
++use Drupal\node\NodeInterface;
+ use Drupal\rules\Core\RulesActionBase;
+ use Psr\Log\LoggerInterface;
+ use Symfony\Component\DependencyInjection\ContainerInterface;
+@@ -22,18 +23,28 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
+  *   label = @Translation("Send email"),
+  *   category = @Translation("System"),
+  *   context = {
++ *     "node" = @ContextDefinition("entity:node",
++ *       label = @Translation("Node"),
++ *       is_token_data = TRUE,
++ *     ),
+  *     "to" = @ContextDefinition("email",
+  *       label = @Translation("Send to"),
+  *       description = @Translation("Email address(es) drupal will send an email to."),
+- *       multiple = TRUE,
++ *       token_types = {"node"},
++ *       hide_switch_to_data_selection_button = TRUE,
+  *     ),
+  *     "subject" = @ContextDefinition("string",
+  *       label = @Translation("Subject"),
+  *       description = @Translation("The email's subject."),
++ *       token_types = {"node"},
++ *       hide_switch_to_data_selection_button = TRUE,
+  *     ),
+  *     "message" = @ContextDefinition("string",
+  *       label = @Translation("Message"),
+  *       description = @Translation("The email's message body."),
++ *       form_element = "textarea",
++ *       token_types = {"node"},
++ *       hide_switch_to_data_selection_button = TRUE,
+  *     ),
+  *     "reply" = @ContextDefinition("email",
+  *       label = @Translation("Reply to"),
+@@ -103,7 +114,9 @@ class SystemSendEmail extends RulesActionBase implements ContainerFactoryPluginI
+   /**
+    * Send a system email.
+    *
+-   * @param string[] $to
++   * @param \Drupal\node\NodeInterface $node
++   *   The node to run the token replacements.
++   * @param string $to
+    *   Email addresses of the recipients.
+    * @param string $subject
+    *   Subject of the email.
+@@ -114,8 +127,9 @@ class SystemSendEmail extends RulesActionBase implements ContainerFactoryPluginI
+    * @param \Drupal\Core\Language\LanguageInterface|null $language
+    *   (optional) Language code.
+    */
+-  protected function doExecute($to, $subject, $message, $reply = NULL, LanguageInterface $language = NULL) {
++  protected function doExecute(NodeInterface $node, $to, $subject, $message, $reply = NULL, LanguageInterface $language = NULL) {
+     $langcode = isset($language) ? $language->getId() : LanguageInterface::LANGCODE_SITE_DEFAULT;
++
+     $params = [
+       'subject' => $subject,
+       'message' => $message,
+@@ -123,10 +137,9 @@ class SystemSendEmail extends RulesActionBase implements ContainerFactoryPluginI
+     // Set a unique key for this mail.
+     $key = 'rules_action_mail_' . $this->getPluginId();
+ 
+-    $recipients = implode(', ', $to);
+-    $message = $this->mailManager->mail('rules', $key, $recipients, $langcode, $params, $reply);
++    $message = $this->mailManager->mail('rules', $key, $to, $langcode, $params, $reply);
+     if ($message['result']) {
+-      $this->logger->notice('Successfully sent email to %recipient', ['%recipient' => $recipients]);
++      $this->logger->notice('Successfully sent email to %recipient', ['%recipient' => $to]);
+     }
+ 
+   }
