@@ -29,7 +29,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *     "message" = @ContextDefinition("string",
  *       label = @Translation("Message"),
  *       description = @Translation("The email's message body."),
- *       form_element = "textarea",
  *     ),
  *     "reply" = @ContextDefinition("email",
  *       label = @Translation("Reply to"),
