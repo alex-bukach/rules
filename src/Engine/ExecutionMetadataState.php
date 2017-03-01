@@ -5,8 +5,9 @@ namespace Drupal\rules\Engine;
 use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\TypedData\DataDefinitionInterface;
 use Drupal\rules\Context\GlobalContextRepositoryTrait;
-use Drupal\rules\Exception\RulesIntegrityException;
-use Drupal\rules\TypedData\DataFetcherTrait;
+use Drupal\rules\Exception\IntegrityException;
+use Drupal\typed_data\DataFetcherTrait;
+use Drupal\typed_data\Exception\TypedDataException;
 
 /**
  * The state used during configuration time holding data definitions.
@@ -61,7 +62,7 @@ class ExecutionMetadataState implements ExecutionMetadataStateInterface {
    */
   public function getDataDefinition($name) {
     if (!array_key_exists($name, $this->dataDefinitions)) {
-      throw new RulesIntegrityException("Unable to get variable $name, it is not defined.");
+      throw new IntegrityException("Unable to get variable $name, it is not defined.");
     }
     return $this->dataDefinitions[$name];
   }
@@ -102,9 +103,9 @@ class ExecutionMetadataState implements ExecutionMetadataStateInterface {
         ->getDataFetcher()
         ->fetchDefinitionBySubPaths($this->getDataDefinition($var_name), $parts, $langcode);
     }
-    catch (\InvalidArgumentException $e) {
+    catch (TypedDataException $e) {
       // Pass on the original exception in the exception trace.
-      throw new RulesIntegrityException($e->getMessage(), 0, $e);
+      throw new IntegrityException($e->getMessage(), 0, $e);
     }
   }
 
@@ -113,8 +114,8 @@ class ExecutionMetadataState implements ExecutionMetadataStateInterface {
    */
   public function autocomplete($partial_property_path) {
     return $this
-        ->getDataFetcher()
-        ->autocompletePropertyPath($this->dataDefinitions, $partial_property_path);
+      ->getDataFetcher()
+      ->autocompletePropertyPath($this->dataDefinitions, $partial_property_path);
   }
 
 }

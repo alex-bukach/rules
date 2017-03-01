@@ -5,11 +5,14 @@ namespace Drupal\rules\Form\Expression;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\rules\Context\ContextConfig;
 use Drupal\rules\Context\ContextDefinitionInterface;
+use Drupal\rules\Context\DataProcessorManagerTrait;
 
 /**
  * Provides form logic for handling contexts when configuring an expression.
  */
 trait ContextFormTrait {
+
+  use DataProcessorManagerTrait;
 
   /**
    * Provides the form part for a context parameter.
@@ -119,6 +122,11 @@ trait ContextFormTrait {
         }
         else {
           $context_config->setValue($context_name, $value['setting']);
+        }
+        // For now, always add in the token context processor - if it's present.
+        // @todo: Improve this in https://www.drupal.org/node/2804035.
+        if ($this->getDataProcessorManager()->getDefinition('rules_tokens')) {
+          $context_config->process($context_name, 'rules_tokens');
         }
       }
     }
